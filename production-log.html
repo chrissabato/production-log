@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Production Log</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --border:    #2a2d3a;
+      --accent:    #4f8ef7;
+      --accent-dk: #3a6fd8;
+      --danger:    #e05252;
+      --danger-dk: #c03a3a;
+      --success:   #3ecf8e;
+      --text:      #e2e4ec;
+      --muted:     #6b7090;
+      --mono:      'Courier New', Courier, monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem 4rem;
+    }
+
+    header {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2rem;
+    }
+
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: .02em; }
+    h1 span { color: var(--accent); }
+
+    #clock {
+      font-family: var(--mono);
+      font-size: .95rem;
+      color: var(--muted);
+      letter-spacing: .05em;
+    }
+
+    /* ── Status bar ── */
+    #status-bar {
+      width: 100%;
+      max-width: 760px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: .85rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    #status-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+      transition: background .3s;
+    }
+    #status-dot.active { background: var(--success); box-shadow: 0 0 6px var(--success); animation: pulse 1.4s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+
+    #status-text { font-size: .9rem; color: var(--muted); }
+    #elapsed     { margin-left: auto; font-family: var(--mono); font-size: .9rem; color: var(--muted); }
+
+    /* ── Controls ── */
+    #controls {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      gap: .75rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: .65rem 1.4rem;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, opacity .15s, transform .1s;
+    }
+    button:active { transform: scale(.97); }
+    button:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+
+    #btn-start { background: var(--accent);  color: #fff; }
+    #btn-start:hover:not(:disabled) { background: var(--accent-dk); }
+
+    #btn-log   { background: var(--surface); color: var(--text); border: 1px solid var(--border); flex: 1; min-width: 120px; }
+    #btn-log:hover:not(:disabled) { background: var(--border); }
+
+    #btn-stop  { background: var(--danger); color: #fff; }
+    #btn-stop:hover:not(:disabled) { background: var(--danger-dk); }
+
+    /* ── Log input area ── */
+    #log-form {
+      width: 100%;
+      max-width: 760px;
+      display: none;
+      gap: .6rem;
+      margin-bottom: 1.5rem;
+    }
+    #log-form.visible { display: flex; }
+
+    #note-input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: .65rem 1rem;
+      color: var(--text);
+      font-size: .95rem;
+      outline: none;
+    }
+    #note-input:focus { box-shadow: 0 0 0 3px rgba(79,142,247,.25); }
+
+    #btn-save {
+      background: var(--accent);
+      color: #fff;
+      white-space: nowrap;
+    }
+    #btn-save:hover { background: var(--accent-dk); }
+
+    #btn-cancel {
+      background: var(--surface);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    #btn-cancel:hover { background: var(--border); }
+
+    /* ── Log table ── */
+    #log-wrap {
+      width: 100%;
+      max-width: 760px;
+    }
+
+    #log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: .65rem;
+    }
+
+    #log-header h2 { font-size: .85rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+    #entry-count   { font-size: .8rem; color: var(--muted); }
+
+    #log-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+    }
+
+    thead th {
+      background: var(--surface);
+      padding: .6rem 1rem;
+      text-align: left;
+      font-weight: 600;
+      color: var(--muted);
+      font-size: .78rem;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface); }
+
+    td {
+      padding: .6rem 1rem;
+      vertical-align: top;
+    }
+
+    td.ts {
+      font-family: var(--mono);
+      font-size: .82rem;
+      color: var(--muted);
+      white-space: nowrap;
+      width: 180px;
+    }
+
+    td.idx {
+      color: var(--muted);
+      font-size: .82rem;
+      width: 40px;
+      text-align: right;
+    }
+
+    td.note { word-break: break-word; }
+
+    #empty-state {
+      padding: 3rem 1rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(60px);
+      background: var(--success);
+      color: #0a2a1a;
+      font-weight: 700;
+      font-size: .88rem;
+      padding: .55rem 1.2rem;
+      border-radius: 999px;
+      pointer-events: none;
+      transition: transform .25s ease, opacity .25s ease;
+      opacity: 0;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Production <span>Log</span></h1>
+  <div id="clock">--:--:--</div>
+</header>
+
+<!-- Status bar -->
+<div id="status-bar">
+  <div id="status-dot"></div>
+  <span id="status-text">Session not started</span>
+  <span id="elapsed"></span>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <button id="btn-start">Start</button>
+  <button id="btn-log"   disabled>+ Log Entry</button>
+  <button id="btn-stop"  disabled>Stop &amp; Export</button>
+</div>
+
+<!-- Inline log form -->
+<div id="log-form">
+  <input id="note-input" type="text" placeholder="Enter note…" maxlength="500" autocomplete="off" />
+  <button id="btn-save">Save</button>
+  <button id="btn-cancel">Cancel</button>
+</div>
+
+<!-- Log table -->
+<div id="log-wrap">
+  <div id="log-header">
+    <h2>Entries</h2>
+    <span id="entry-count">0 entries</span>
+  </div>
+  <div id="log-table-wrap">
+    <table id="log-table">
+      <thead>
+        <tr>
+          <th style="width:40px">#</th>
+          <th style="width:180px">Timestamp</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody id="log-body">
+        <tr><td colspan="3"><div id="empty-state">No entries yet. Start a session and click &ldquo;+ Log Entry&rdquo; to begin.</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="toast">Entry saved</div>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────
+  const state = {
+    running:   false,
+    startTime: null,
+    entries:   [],        // { index, ts, note }
+    timerID:   null,
+  };
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const $clock    = document.getElementById('clock');
+  const $dot      = document.getElementById('status-dot');
+  const $statusTx = document.getElementById('status-text');
+  const $elapsed  = document.getElementById('elapsed');
+  const $btnStart = document.getElementById('btn-start');
+  const $btnLog   = document.getElementById('btn-log');
+  const $btnStop  = document.getElementById('btn-stop');
+  const $logForm  = document.getElementById('log-form');
+  const $noteIn   = document.getElementById('note-input');
+  const $btnSave  = document.getElementById('btn-save');
+  const $btnCancel= document.getElementById('btn-cancel');
+  const $logBody  = document.getElementById('log-body');
+  const $entryCount = document.getElementById('entry-count');
+  const $toast    = document.getElementById('toast');
+
+  // ── Clock ─────────────────────────────────────────────────────────────────
+  function tickClock() {
+    const now = new Date();
+    $clock.textContent = now.toLocaleTimeString([], { hour12: false });
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  // ── Elapsed ───────────────────────────────────────────────────────────────
+  function formatElapsed(ms) {
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function updateElapsed() {
+    if (!state.running) return;
+    $elapsed.textContent = formatElapsed(Date.now() - state.startTime);
+  }
+
+  // ── Start ─────────────────────────────────────────────────────────────────
+  $btnStart.addEventListener('click', () => {
+    state.running   = true;
+    state.startTime = Date.now();
+    state.entries   = [];
+    renderTable();
+
+    $dot.classList.add('active');
+    $statusTx.textContent = 'Session running — started ' + new Date().toLocaleTimeString();
+    $elapsed.textContent  = '00:00:00';
+
+    $btnStart.disabled = true;
+    $btnLog.disabled   = false;
+    $btnStop.disabled  = false;
+
+    state.timerID = setInterval(updateElapsed, 1000);
+  });
+
+  // ── Log form toggle ───────────────────────────────────────────────────────
+  $btnLog.addEventListener('click', () => {
+    $logForm.classList.add('visible');
+    $noteIn.value = '';
+    $noteIn.focus();
+    $btnLog.disabled = true;
+  });
+
+  function closeForm() {
+    $logForm.classList.remove('visible');
+    $btnLog.disabled = false;
+  }
+
+  $btnCancel.addEventListener('click', closeForm);
+
+  $noteIn.addEventListener('keydown', e => {
+    if (e.key === 'Enter') $btnSave.click();
+    if (e.key === 'Escape') closeForm();
+  });
+
+  // ── Save entry ────────────────────────────────────────────────────────────
+  $btnSave.addEventListener('click', () => {
+    const raw = $noteIn.value.trim();
+    if (!raw) { $noteIn.focus(); return; }
+
+    const now = new Date();
+    state.entries.push({
+      index: state.entries.length + 1,
+      ts:    now,
+      note:  raw,
+    });
+
+    renderTable();
+    closeForm();
+    showToast();
+  });
+
+  // ── Render table ──────────────────────────────────────────────────────────
+  function fmtTs(d) {
+    return d.toLocaleDateString([], { month:'2-digit', day:'2-digit', year:'numeric' })
+      + '  '
+      + d.toLocaleTimeString([], { hour12: false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  }
+
+  function renderTable() {
+    $entryCount.textContent = state.entries.length + (state.entries.length === 1 ? ' entry' : ' entries');
+
+    if (state.entries.length === 0) {
+      $logBody.innerHTML = '<tr><td colspan="3"><div id="empty-state">No entries yet. Click &ldquo;+ Log Entry&rdquo; to begin.</div></td></tr>';
+      return;
+    }
+
+    $logBody.innerHTML = [...state.entries].reverse().map(e =>
+      `<tr>
+        <td class="idx">${e.index}</td>
+        <td class="ts">${fmtTs(e.ts)}</td>
+        <td class="note">${escHtml(e.note)}</td>
+      </tr>`
+    ).join('');
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Stop & export ─────────────────────────────────────────────────────────
+  $btnStop.addEventListener('click', () => {
+    if (!state.running) return;
+
+    clearInterval(state.timerID);
+    state.running = false;
+
+    $dot.classList.remove('active');
+    const dur = formatElapsed(Date.now() - state.startTime);
+    $statusTx.textContent = `Session ended — duration ${dur}`;
+
+    $btnStart.disabled = false;
+    $btnLog.disabled   = true;
+    $btnStop.disabled  = true;
+    closeForm();
+
+    exportCSV();
+  });
+
+  function exportCSV() {
+    const rows = [
+      ['#', 'Timestamp', 'Elapsed (s)', 'Note'],
+      ...state.entries.map(e => [
+        e.index,
+        e.ts.toISOString(),
+        ((e.ts - state.startTime) / 1000).toFixed(1),
+        e.note,
+      ])
+    ];
+
+    const csv = rows.map(r =>
+      r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')
+    ).join('\r\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const date = new Date().toISOString().slice(0,19).replace(/[:T]/g, '-');
+    a.href     = url;
+    a.download = `production-log-${date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  let toastTimer;
+  function showToast() {
+    clearTimeout(toastTimer);
+    $toast.classList.add('show');
+    toastTimer = setTimeout(() => $toast.classList.remove('show'), 1800);
+  }
+</script>
+</body>
+</html>

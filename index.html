@@ -80,7 +80,23 @@
     }
 
     #status-text { font-size: .9rem; color: var(--muted); }
-    #elapsed     { margin-left: auto; font-family: var(--mono); font-size: .9rem; color: var(--muted); }
+
+    #elapsed {
+      display: block;
+      width: 100%;
+      max-width: 760px;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 4rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      color: var(--success);
+      margin-bottom: 1.5rem;
+      min-height: 5rem;
+      line-height: 1;
+      transition: color .3s;
+    }
+    #elapsed.inactive { color: var(--border); }
 
     /* ── Controls ── */
     #controls {
@@ -252,8 +268,10 @@
 <div id="status-bar">
   <div id="status-dot"></div>
   <span id="status-text">Session not started</span>
-  <span id="elapsed"></span>
 </div>
+
+<!-- Elapsed timer -->
+<div id="elapsed" class="inactive">00:00:00</div>
 
 <!-- Controls -->
 <div id="controls">
@@ -350,6 +368,7 @@
     $dot.classList.add('active');
     $statusTx.textContent = 'Session running — started ' + new Date().toLocaleTimeString();
     $elapsed.textContent  = '00:00:00';
+    $elapsed.classList.remove('inactive');
 
     $btnStart.disabled = true;
     $btnLog.disabled   = false;
@@ -433,6 +452,7 @@
     $dot.classList.remove('active');
     const dur = formatElapsed(Date.now() - state.startTime);
     $statusTx.textContent = `Session ended — duration ${dur}`;
+    $elapsed.classList.add('inactive');
 
     $btnStart.disabled = false;
     $btnLog.disabled   = true;
